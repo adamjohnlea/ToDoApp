@@ -2,28 +2,6 @@ import SwiftUI
 import SwiftData
 import Charts
 
-struct TodoStats {
-    let totalCount: Int
-    let notStartedCount: Int
-    let inProgressCount: Int
-    let completedCount: Int
-    let completionRate: Double
-    let priorityDistribution: [Priority: Int]
-    let completionTrend: [Date: Int]
-    
-    // Computed property to get the percentage distribution
-    var statusPercentages: [(status: String, percentage: Double)] {
-        let total = Double(totalCount)
-        guard total > 0 else { return [] }
-        
-        return [
-            ("Not Started", Double(notStartedCount) / total * 100),
-            ("In Progress", Double(inProgressCount) / total * 100),
-            ("Completed", Double(completedCount) / total * 100)
-        ]
-    }
-}
-
 struct StatsView: View {
     @Query private var items: [Item]
     
@@ -33,6 +11,51 @@ struct StatsView: View {
     private var completedCount: Int { items.filter { $0.status == .completed }.count }
     private var completionRate: Double {
         totalCount > 0 ? Double(completedCount) / Double(totalCount) * 100 : 0
+    }
+    
+    // Priority distribution
+    private var priorityData: [(priority: String, count: Int, color: Color)] {
+        let lowCount = items.filter { $0.priority == .low }.count
+        let mediumCount = items.filter { $0.priority == .medium }.count
+        let highCount = items.filter { $0.priority == .high }.count
+        
+        return [
+            ("High", highCount, .red),
+            ("Medium", mediumCount, .yellow),
+            ("Low", lowCount, .green)
+        ]
+    }
+    
+    // Status distribution for charts
+    private var statusData: [(status: String, count: Int, color: Color)] {
+        return [
+            ("Completed", completedCount, .green),
+            ("In Progress", inProgressCount, .orange),
+            ("Not Started", notStartedCount, .red)
+        ]
+    }
+    
+    // Completion trend over time (last 7 days)
+    private var completionTrendData: [(date: Date, count: Int)] {
+        let calendar = Calendar.current
+        let now = Date()
+        
+        // Create array for last 7 days
+        let dates = (0..<7).compactMap { daysAgo in
+            calendar.date(byAdding: .day, value: -daysAgo, to: now)
+        }.reversed()
+        
+        return dates.map { date in
+            let startOfDay = calendar.startOfDay(for: date)
+            let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) ?? startOfDay
+            
+            let completedOnDay = items.filter { item in
+                guard let completionDate = item.completionDate else { return false }
+                return completionDate >= startOfDay && completionDate < endOfDay
+            }.count
+            
+            return (date: startOfDay, count: completedOnDay)
+        }
     }
     
     var body: some View {
@@ -80,21 +103,137 @@ struct StatsView: View {
                     .cornerRadius(12)
                     .padding(.horizontal)
                     
-                    // Distribution circles
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Status Distribution")
-                            .font(.headline)
-                            .padding(.leading)
-                        
-                        HStack(spacing: 24) {
-                            statusCircle(count: completedCount, total: totalCount, color: .green, title: "Completed")
-                            statusCircle(count: inProgressCount, total: totalCount, color: .orange, title: "In Progress")
-                            statusCircle(count: notStartedCount, total: totalCount, color: .red, title: "Not Started")
+                    // Status Distribution Chart
+                    if totalCount > 0 {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Status Distribution")
+                                .font(.headline)
+                                .padding(.leading)
+                            
+                            Chart(statusData, id: \.status) { item in
+                                SectorMark(
+                                    angle: .value("Count", item.count),
+                                    innerRadius: .ratio(0.5),
+                                    angularInset: 2
+                                )
+                                .foregroundStyle(item.color)
+                                .cornerRadius(5)
+                                .annotation(position: .overlay) {
+                                    if item.count > 0 {
+                                        Text("\(item.count)")
+                                            .font(.headline)
+                                            .fontWeight(.bold)
+                                            .foregroundStyle(.white)
+                                    }
+                                }
+                            }
+                            .frame(height: 250)
+                            .padding()
+                            .chartLegend(position: .bottom, spacing: 10)
+                            .chartBackground { chartProxy in
+                                GeometryReader { geometry in
+                                    let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                                    VStack(spacing: 2) {
+                                        Text("\(totalCount)")
+                                            .font(.title)
+                                            .fontWeight(.bold)
+                                        Text("Total")
+                                            .font(.caption)
+                                            .foregroundColor(.secondary)
+                                    }
+                                    .position(center)
+                                }
+                            }
                         }
                         .padding()
+                        .background(Color(.secondarySystemBackground))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
+                        
+                        // Priority Distribution Chart
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Priority Distribution")
+                                .font(.headline)
+                                .padding(.leading)
+                            
+                            Chart(priorityData, id: \.priority) { item in
+                                BarMark(
+                                    x: .value("Priority", item.priority),
+                                    y: .value("Count", item.count)
+                                )
+                                .foregroundStyle(item.color.gradient)
+                                .cornerRadius(5)
+                                .annotation(position: .top) {
+                                    if item.count > 0 {
+                                        Text("\(item.count)")
+                                            .font(.caption)
+                                            .fontWeight(.bold)
+                                    }
+                                }
+                            }
+                            .frame(height: 200)
+                            .padding()
+                            .chartYAxis {
+                                AxisMarks(position: .leading)
+                            }
+                        }
+                        .padding()
+                        .background(Color(.secondarySystemBackground))
+                        .cornerRadius(12)
+                        .padding(.horizontal)
+                        
+                        // Completion Trend Chart
+                        if completionTrendData.contains(where: { $0.count > 0 }) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Completion Trend (Last 7 Days)")
+                                    .font(.headline)
+                                    .padding(.leading)
+                                
+                                Chart(completionTrendData, id: \.date) { item in
+                                    LineMark(
+                                        x: .value("Date", item.date, unit: .day),
+                                        y: .value("Completed", item.count)
+                                    )
+                                    .foregroundStyle(.green.gradient)
+                                    .interpolationMethod(.catmullRom)
+                                    
+                                    AreaMark(
+                                        x: .value("Date", item.date, unit: .day),
+                                        y: .value("Completed", item.count)
+                                    )
+                                    .foregroundStyle(.green.opacity(0.3).gradient)
+                                    .interpolationMethod(.catmullRom)
+                                    
+                                    PointMark(
+                                        x: .value("Date", item.date, unit: .day),
+                                        y: .value("Completed", item.count)
+                                    )
+                                    .foregroundStyle(.green)
+                                }
+                                .frame(height: 200)
+                                .padding()
+                                .chartXAxis {
+                                    AxisMarks(values: .stride(by: .day, count: 1)) { value in
+                                        if let date = value.as(Date.self) {
+                                            AxisValueLabel {
+                                                Text(date, format: .dateTime.weekday(.narrow))
+                                            }
+                                            AxisGridLine()
+                                        }
+                                    }
+                                }
+                                .chartYAxis {
+                                    AxisMarks(position: .leading)
+                                }
+                            }
+                            .padding()
+                            .background(Color(.secondarySystemBackground))
+                            .cornerRadius(12)
+                            .padding(.horizontal)
+                        }
                     }
                 }
-                .padding()
+                .padding(.vertical)
             }
             .navigationTitle("Todo Stats")
             .overlay {
@@ -106,36 +245,6 @@ struct StatsView: View {
                     }
                 }
             }
-        }
-    }
-    
-    private func statusCircle(count: Int, total: Int, color: Color, title: String) -> some View {
-        let percentage = total > 0 ? Double(count) / Double(total) : 0
-        
-        return VStack {
-            ZStack {
-                Circle()
-                    .stroke(color.opacity(0.2), lineWidth: 10)
-                    .frame(width: 80, height: 80)
-                
-                Circle()
-                    .trim(from: 0, to: CGFloat(percentage))
-                    .stroke(color, style: StrokeStyle(lineWidth: 10, lineCap: .round))
-                    .frame(width: 80, height: 80)
-                    .rotationEffect(.degrees(-90))
-                
-                Text("\(Int(percentage * 100))%")
-                    .font(.headline)
-                    .fontWeight(.bold)
-            }
-            
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-            
-            Text("\(count)")
-                .font(.title2)
-                .fontWeight(.bold)
         }
     }
     

@@ -21,63 +21,7 @@ struct TodoListView: View {
     
     // Add sample data function
     private func addSampleData() {
-        // Add sample data
-        let calendar = Calendar.current
-        let now = Date()
-        
-        // Sample 1: High priority, due today
-        let highPriorityTodo = Item(
-            title: "Finish project proposal",
-            itemDescription: "Complete the draft and send to the team for review",
-            status: .inProgress,
-            dueDate: calendar.date(bySettingHour: 17, minute: 0, second: 0, of: now),
-            priority: .high
-        )
-        
-        // Sample 2: Medium priority, due tomorrow
-        let mediumPriorityTodo = Item(
-            title: "Weekly team meeting",
-            itemDescription: "Prepare agenda and discussion points",
-            status: .notStarted,
-            dueDate: calendar.date(byAdding: .day, value: 1, to: now),
-            priority: .medium
-        )
-        
-        // Sample 3: Low priority, due next week
-        let lowPriorityTodo = Item(
-            title: "Research new technologies",
-            itemDescription: "Look into SwiftData and latest SwiftUI features",
-            status: .notStarted,
-            dueDate: calendar.date(byAdding: .day, value: 7, to: now),
-            priority: .low
-        )
-        
-        // Sample 4: Completed task
-        let completedTodo = Item(
-            title: "Set up project repository",
-            itemDescription: "Create Git repo and invite team members",
-            status: .completed,
-            dueDate: calendar.date(byAdding: .day, value: -2, to: now),
-            priority: .high
-        )
-        completedTodo.completionDate = calendar.date(byAdding: .hour, value: -12, to: now)
-        
-        // Sample 5: No due date
-        let noDueDateTodo = Item(
-            title: "Brainstorm app ideas",
-            itemDescription: "Think about potential new features",
-            status: .notStarted,
-            dueDate: nil,
-            priority: .medium
-        )
-        
-        modelContext.insert(highPriorityTodo)
-        modelContext.insert(mediumPriorityTodo)
-        modelContext.insert(lowPriorityTodo)
-        modelContext.insert(completedTodo)
-        modelContext.insert(noDueDateTodo)
-        
-        try? modelContext.save()
+        SampleDataUtility.addSampleData(to: modelContext)
     }
     
     private var items: [Item] {
@@ -120,7 +64,9 @@ struct TodoListView: View {
                     return item1.title < item2.title
                 }
                 let order: [Priority] = [.high, .medium, .low]
-                return order.firstIndex(of: item1.priority)! < order.firstIndex(of: item2.priority)!
+                let index1 = order.firstIndex(of: item1.priority) ?? order.count
+                let index2 = order.firstIndex(of: item2.priority) ?? order.count
+                return index1 < index2
                 
             case .title:
                 return item1.title < item2.title
@@ -130,7 +76,9 @@ struct TodoListView: View {
                     return item1.title < item2.title
                 }
                 let order: [TodoStatus] = [.inProgress, .notStarted, .completed]
-                return order.firstIndex(of: item1.status)! < order.firstIndex(of: item2.status)!
+                let index1 = order.firstIndex(of: item1.status) ?? order.count
+                let index2 = order.firstIndex(of: item2.status) ?? order.count
+                return index1 < index2
             }
         }
     }
